@@ -105,12 +105,12 @@ def mnist_logreg(executor_ctx, num_epochs=10, print_loss_val_each_epoch=False):
     valid_y_val = np.empty(shape=(batch_size, 10), dtype=np.float32)
 
     # wrap them under tvm.nd.array
-    W1_val = tvm.nd.array(W1_val, ctx=executor_ctx)
-    b1_val = tvm.nd.array(b1_val, ctx=executor_ctx)
-    X_val = tvm.nd.array(X_val, ctx=executor_ctx)
-    y_val = tvm.nd.array(y_val, ctx=executor_ctx)
-    valid_X_val = tvm.nd.array(valid_X_val, ctx=executor_ctx)
-    valid_y_val = tvm.nd.array(valid_y_val, ctx=executor_ctx)
+    W1_val = tvm.nd.array(W1_val, executor_ctx)
+    b1_val = tvm.nd.array(b1_val, executor_ctx)
+    X_val = tvm.nd.array(X_val, executor_ctx)
+    y_val = tvm.nd.array(y_val, executor_ctx)
+    valid_X_val = tvm.nd.array(valid_X_val, executor_ctx)
+    valid_y_val = tvm.nd.array(valid_y_val, executor_ctx)
 
     # training loop
     lr = 1e-3
@@ -139,7 +139,7 @@ def mnist_logreg(executor_ctx, num_epochs=10, print_loss_val_each_epoch=False):
         time_measurements.append(time.time() - start_time)
         if print_loss_val_each_epoch:
             print("loss = %f; Time taken this epoch = %f s" 
-                % (np.asscalar(loss_val.asnumpy()), time_measurements[-1]))
+                % (np.ndarray.item(loss_val.asnumpy()), time_measurements[-1]))
 
     correct_predictions = []
     for minibatch_index in range(n_valid_batches):
@@ -157,7 +157,7 @@ def mnist_logreg(executor_ctx, num_epochs=10, print_loss_val_each_epoch=False):
             convert_to_numpy_ret_vals=True)
         correct_prediction = np.equal(
             np.argmax(valid_y_val.asnumpy(), 1),
-            np.argmax(valid_y_predicted, 1)).astype(np.float)
+            np.argmax(valid_y_predicted, 1)).astype(float)
         correct_predictions.extend(correct_prediction)
     accuracy = np.mean(correct_predictions)
     # validation set accuracy=0.928200
@@ -233,16 +233,16 @@ def mnist_mlp(executor_ctx=None, num_epochs=10,
     valid_y_val = np.empty(shape=(batch_size, 10), dtype=np.float32)
 
     # wrap with tvm.nd.array
-    W1_val = tvm.nd.array(W1_val, ctx=executor_ctx)
-    W2_val = tvm.nd.array(W2_val, ctx=executor_ctx)
-    W3_val = tvm.nd.array(W3_val, ctx=executor_ctx)
-    b1_val = tvm.nd.array(b1_val, ctx=executor_ctx)
-    b2_val = tvm.nd.array(b2_val, ctx=executor_ctx)
-    b3_val = tvm.nd.array(b3_val, ctx=executor_ctx)
-    X_val = tvm.nd.array(X_val, ctx=executor_ctx)
-    y_val = tvm.nd.array(y_val, ctx=executor_ctx)
-    valid_X_val = tvm.nd.array(valid_X_val, ctx=executor_ctx)
-    valid_y_val = tvm.nd.array(valid_y_val, ctx=executor_ctx)
+    W1_val = tvm.nd.array(W1_val, executor_ctx)
+    W2_val = tvm.nd.array(W2_val, executor_ctx)
+    W3_val = tvm.nd.array(W3_val, executor_ctx)
+    b1_val = tvm.nd.array(b1_val, executor_ctx)
+    b2_val = tvm.nd.array(b2_val, executor_ctx)
+    b3_val = tvm.nd.array(b3_val, executor_ctx)
+    X_val = tvm.nd.array(X_val, executor_ctx)
+    y_val = tvm.nd.array(y_val, executor_ctx)
+    valid_X_val = tvm.nd.array(valid_X_val, executor_ctx)
+    valid_y_val = tvm.nd.array(valid_y_val, executor_ctx)
 
     # training loop
     lr = 1.0e-3
@@ -297,7 +297,7 @@ def mnist_mlp(executor_ctx=None, num_epochs=10,
         time_measurements.append(time.time() - start_time)
         if print_loss_val_each_epoch:
             print("loss = %f; Time taken this epoch = %f s" 
-                % (np.asscalar(loss_val.asnumpy()), time_measurements[-1]))
+                % (np.ndarray.item(loss_val.asnumpy()), time_measurements[-1]))
 
 
     correct_predictions = []
@@ -320,7 +320,7 @@ def mnist_mlp(executor_ctx=None, num_epochs=10,
             convert_to_numpy_ret_vals=True)
         correct_prediction = np.equal(
             np.argmax(valid_y_val.asnumpy(), 1),
-            np.argmax(valid_y_predicted, 1)).astype(np.float)
+            np.argmax(valid_y_predicted, 1)).astype(float)
         correct_predictions.extend(correct_prediction)
     accuracy = np.mean(correct_predictions)
     # validation set accuracy=0.970800
@@ -362,7 +362,9 @@ if __name__ == "__main__":
         tgt_host = "llvm"
         assert False, "cuda codegen not ready"
     # create context object
-    executor_ctx = tvm.context(tgt, 0)
+    # executor_ctx = tvm.context(tgt, 0)
+    executor_ctx = tvm.device(tgt, 0)
+
 
     print_loss_val_each_epoch = True if args.print_loss_val_each_epoch \
                                      else False

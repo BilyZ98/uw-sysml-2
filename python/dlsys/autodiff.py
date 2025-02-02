@@ -155,7 +155,14 @@ class AddOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """Need to handle input_vals[0].shape != input_vals[1].shape"""
-        return broadcast_rule(input_shapes[0], input_shapes[1])
+        shape0 = input_shapes[0]
+        shape1 = input_shapes[1]
+        if len(shape0) == 1:
+            shape0 = (shape0[0], )
+
+        if len(shape1) == 1:
+            shape1 = (shape1[0],)
+        return broadcast_rule(shape0, shape1)
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
         return tvm_op.make_elemwise_add(
@@ -227,11 +234,11 @@ class MulByConstOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
-        return broadcast_rule(input_shapes[0],[1])
+        return broadcast_rule(input_shapes[0],(1,))
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
         """TODO: Your code here"""
-        return tvm_op.make_elemwise_mul_by_const(input_shapes[0], tgt, tgt_host, "elem_mul_const")
+        return tvm_op.make_elemwise_mul_by_const(input_shapes[0], node.const_attr, tgt, tgt_host, "elem_mul_const")
 
 class MatMulOp(Op):
     def __call__(self, node_A, node_B, trans_A=False, trans_B=False):
@@ -280,20 +287,27 @@ class MatMulOp(Op):
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
         shape0 = input_shapes[0]
+        # print('shape0 is', shape0)
         if node.matmul_attr_trans_A:
-            num_dims = shape0.ndim
-            axes = list(range(num_dims))
-            axes[-1] , axes[-2] = axes[-2], axes[-1]
-            shape0 = np.transpose(shape0, axes)
+            shape0 = (shape0[1],shape0[0])
+            # num_dims = len(shape0)
+            # axes = list(range(num_dims))
+            # axes[-1] , axes[-2] = axes[-2], axes[-1]
+            # print('axes ', axes)
+            # print('shape 0 ', shape0)
+            # shape0 = np.transpose(shape0, axes)
 
         shape1 = input_shapes[1]
+        # print('shape1 is ', shape1)
         if node.matmul_attr_trans_B:
-            num_dims = shape0.ndim
-            axes = list(range(num_dims))
-            axes[-1] , axes[-2] = axes[-2], axes[-1]
-            shape1 = np.transpose(shape1, axes)
+            shape1 = (shape1[1], shape1[0])
+            # num_dims = len(shape1)
+            # axes = list(range(num_dims))
+            # axes[-1] , axes[-2] = axes[-2], axes[-1]
+            # shape1 = np.transpose(shape1, axes)
 
-        return broadcast_rule(shape0, shape1)
+        return (shape0[0], shape1[1]) 
+        # return broadcast_rule(shape0, shape1)
 
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
@@ -332,6 +346,8 @@ class ZerosLikeOp(Op):
 
     def compute(self, node, input_vals, output_val, compiled_func):
         assert len(input_vals) == 1
+        # print('input 0 shape', input_vals[0].shape)
+        # print('ouput val shape', output_val.shape)
         output_val.copyfrom(
             np.zeros(input_vals[0].shape, dtype = input_vals[0].dtype))
 
@@ -341,10 +357,11 @@ class ZerosLikeOp(Op):
     def infer_shape(self, node, input_shapes):
         """If input_shape is a vector, simpler to return (1,)"""
         """TODO: Your code here"""
-        if len(input_shapes) == 1:
-            return [1]
-        else:
-            return input_shapes
+        return input_shapes[0]
+        # if len(input_shapes) == 1:
+        #     return (input_shapes[0],)
+        # else:
+        #     return 
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
         return None
@@ -369,10 +386,11 @@ class OnesLikeOp(Op):
     def infer_shape(self, node, input_shapes):
         """If input_shape is a vector, simpler to return (1,)"""
         """TODO: Your code here"""
-        if len(input_shapes) == 1:
-            return [1]
-        else:
-            return input_shapes
+        return (1,)
+        # if len(input_shapes) == 1:
+        #     return [1]
+        # else:
+        #     return input_shapes
 
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
@@ -432,7 +450,10 @@ class BroadcastToOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
-        return broadcast_rule(input_shapes[0], input_shapes[1])
+        shape0 = input_shapes[0]
+        if len(shape0) == 1:
+            shape0 = (shape0[0],)
+        return broadcast_rule(shape0, input_shapes[1])
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
         """TODO: Your code here"""
@@ -471,7 +492,8 @@ class SoftmaxCrossEntropyOp(Op):
 
     def infer_shape(self, node, input_shapes):
         """TODO: Your code here"""
-        return broadcast_rule(input_shapes[0], input_shapes[1])
+        return (1,)
+        # return broadcast_rule(input_shapes[0], input_shapes[1])
 
     def compiled_func(self, node, input_shapes, tgt, tgt_host):
         """TODO: Your code here"""
@@ -603,13 +625,23 @@ class Executor(object):
         feed_shapes: node->shapes mapping for feed_dict nodes.
         """
         """TODO: Your code here"""
-        self.node_to_shape_map = copy.deepcopy(feed_shapes)
+        # self.node_to_shape_map = copy.deepcopy(feed_shapes)
+        self.node_to_shape_map = {}
+        # print('node to shape map', self.node_to_shape_map)
+        # for k,v in self.node_to_shape_map.items():
+        #     print('k ', k, 'k name', k.name, 'type k', type(k))
         for node in self.topo_order:
             input_shapes = []
+            # print('cur node type of node', type(node), 'node name', node.name)
             for input_node in node.inputs:
+                # print('type of node', type(input_node), 'node name', input_node.name)
                 input_shapes.append(self.node_to_shape_map[input_node])
-            infer_shape = node.op.infer_shape(node, input_shapes)
-            self.node_to_shape_map[node] = infer_shape
+            if not  isinstance(node.op, PlaceholderOp)   : 
+                # print('add type of node', type(node), 'node name', node.name)
+                infer_shape = node.op.infer_shape(node, input_shapes)
+                self.node_to_shape_map[node] = infer_shape
+            else:
+                self.node_to_shape_map[node] = feed_shapes[node]
 
 
     def memory_plan(self, feed_shapes):
@@ -686,7 +718,7 @@ class Executor(object):
 
         node_to_val_map = {}
         for node, value in feed_dict.items():
-            assert isinstance(value, tvm.ndarray.NDArray),\
+            assert isinstance(value, tvm.nd.NDArray),\
                 "feed_dict value type not supported"    
             node_to_val_map[node] = value
 
@@ -710,6 +742,7 @@ class Executor(object):
                 continue
             input_vals = [node_to_val_map[n] for n in node.inputs]
             node_val = self.node_to_arr_map[node]
+            # print('cur node name', node.name)
             # node_val is modified in-place
             node.op.compute(
                 node, input_vals, node_val, self.node_to_compiled_func[node])
@@ -799,6 +832,7 @@ def broadcast_rule(shape_a, shape_b):
     https://docs.scipy.org/doc/numpy-1.10.0/user/basics.broadcasting.html
     http://eli.thegreenplace.net/2015/broadcasting-arrays-in-numpy/
     """
+    # print('shapa', shape_a, 'shapeb', shape_b)
     assert(isinstance(shape_a, tuple))
     assert(isinstance(shape_b, tuple))
     if len(shape_a) > len(shape_b):
@@ -806,12 +840,13 @@ def broadcast_rule(shape_a, shape_b):
     else:
         longer_shape, shorter_shape = shape_b, shape_a
     len_diff = len(longer_shape) - len(shorter_shape)
-    for i in xrange(len_diff):
+    for i in range(len_diff):
         # pad with leading 1s
         shorter_shape = (1,) + shorter_shape
     assert len(shorter_shape) == len(longer_shape)
     output_shape = list(longer_shape)
-    for i in xrange(len(output_shape)):
+    for i in range(len(output_shape)):
+        # print('short shape', shorter_shape[i], 'longer shape', longer_shape[i])
         assert (shorter_shape[i] == longer_shape[i]) \
             or (shorter_shape[i] == 1) \
             or (longer_shape[i] == 1)

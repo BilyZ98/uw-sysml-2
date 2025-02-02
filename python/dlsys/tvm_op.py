@@ -129,6 +129,17 @@ def make_matrix_mul(shapeA, transposeA, shapeB, transposeB, tgt, tgt_host,
 
 
     s = te.create_schedule(C.op)
+    x, y = s[C].op.axis
+    k = s[C].op.reduce_axis[0]
+
+    xo, xi = s[C].split(x, factor=32)
+    yo, yi = s[C].split(y, factor=32)
+    ko, ki = s[C].split(k, factor=4)
+
+    s[C].reorder(xo, yo, ko, xi, yi, ki)
+    s[C].vectorize(yi)
+    s[C].parallel(xo)
+
 
     # here to speed up matrix multiplication
     f = tvm.build(s, [A, B, C], tgt, target_host=tgt_host, name=func_name)
@@ -287,10 +298,10 @@ def make_broadcast_to(shape, to_shape, tgt, tgt_host, func_name,
 
 def make_sgd_update(shape, learning_rate, tgt, tgt_host, func_name,
                     dtype="float32"):
-    X = tvm.placeholder(shape, dtype=dtype, name="A")
-    grad = tvm.placeholder(shape, dtype=dtype, name="grad")
-    Y = tvm.compute(shape, lambda *i: X(*i) - learning_rate * grad(*i))
+    X = te.placeholder(shape, dtype=dtype, name="A")
+    grad = te.placeholder(shape, dtype=dtype, name="grad")
+    Y = te.compute(shape, lambda *i: X(*i) - learning_rate * grad(*i))
 
-    s = tvm.create_schedule(Y.op)
+    s = te.create_schedule(Y.op)
     f = tvm.build(s, [X, grad, Y], tgt, target_host=tgt_host, name=func_name)
     return f
